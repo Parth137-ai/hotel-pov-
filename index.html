@@ -267,9 +267,97 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);fon
 .toast.show{opacity:1;transform:translateY(0)}
 .toast.success{background:var(--green)}.toast.error{background:var(--red)}.toast.info{background:var(--blue)}
 ::-webkit-scrollbar{width:4px;height:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+
+/* ══ MOBILE BOTTOM NAV ══ */
+.mobile-nav{display:none;position:fixed;bottom:0;left:0;right:0;background:var(--sidebar);z-index:300;flex-direction:row;border-top:1px solid rgba(255,255,255,.1);padding-bottom:env(safe-area-inset-bottom)}
+.mob-nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px 4px;border:none;background:transparent;color:rgba(255,255,255,.45);font-size:10px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;gap:3px;transition:all .15s;min-width:0}
+.mob-nav-btn .mn-icon{font-size:20px;line-height:1}
+.mob-nav-btn.active{color:#fff}
+.mob-nav-btn.active .mn-icon{transform:scale(1.1)}
+.mob-tab-bar{display:none;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0}
+.mob-tab-btn{flex:1;padding:10px 4px;border:none;background:transparent;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;transition:all .15s}
+.mob-tab-btn.active{color:var(--accent);border-bottom-color:var(--accent)}
+.mob-cart-badge{position:absolute;top:4px;right:18px;background:var(--accent);color:#fff;font-size:9px;font-weight:700;width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center}
+
+/* ══ MOBILE OVERRIDES (≤ 640px) ══ */
+@media(max-width:640px){
+  /* hide desktop sidebar */
+  .sidebar{display:none!important}
+  /* show mobile nav */
+  .mobile-nav{display:flex}
+  /* push content above bottom nav */
+  .main{padding-bottom:60px}
+  /* hide desktop topbar badge & clock */
+  .topbar-badge,.clock,.shift-badge{display:none}
+  .topbar{padding:0 14px;gap:8px}
+  .topbar-title{font-size:14px}
+
+  /* ORDER page — stack vertically, tab-switched */
+  #page-order{flex-direction:column!important}
+  .menu-panel{flex:none!important;border-right:none!important;border-bottom:1px solid var(--border)}
+  .bill-panel{width:100%!important;flex:none}
+  /* show tab bar on order page */
+  .mob-tab-bar{display:flex}
+  /* show/hide panels via JS class */
+  .menu-panel.mob-hidden{display:none!important}
+  .bill-panel.mob-hidden{display:none!important}
+  /* menu grid 2 cols on mobile */
+  .menu-grid{grid-template-columns:repeat(2,1fr)!important;padding:10px!important;gap:8px!important}
+  .menu-card{padding:9px}
+  /* counter grid smaller */
+  .tables-grid{grid-template-columns:repeat(2,1fr)!important}
+  /* stats grid 2 cols */
+  .stats-grid{grid-template-columns:repeat(2,1fr)!important}
+  .online-stats{grid-template-columns:repeat(3,1fr)!important}
+  /* bills table horizontal scroll */
+  .bills-table{overflow-x:auto}
+  .bt-head,.bt-row{grid-template-columns:70px 90px 70px 60px 80px 90px!important;font-size:11px}
+  /* inv grid 1 col */
+  .inv-grid{grid-template-columns:1fr 1fr!important}
+  /* menu editor 1 col */
+  .menu-editor-grid{grid-template-columns:1fr!important}
+  .form-grid{grid-template-columns:1fr!important}
+  /* online order cards stack */
+  .online-order-card{flex-wrap:wrap;gap:8px}
+  .ooc-actions{flex-direction:row!important;flex-wrap:wrap;width:100%}
+  /* login screen */
+  .staff-grid{grid-template-columns:repeat(2,1fr)!important;width:94vw!important;max-width:360px}
+  .pin-modal{width:94vw!important;max-width:320px}
+  /* report actions */
+  .report-actions{flex-wrap:wrap}
+  /* dl log scrollable */
+  .deduction-log{overflow-x:auto}
+  .dl-head,.dl-row{grid-template-columns:1fr 1fr 60px 80px!important;font-size:11px}
+  /* page padding */
+  #page-counter,#page-kot,#page-online,#page-inventory,#page-menu,#page-reports{padding:12px!important}
+  /* toast bottom offset */
+  .toast{bottom:70px!important;right:12px!important;left:12px!important;text-align:center}
+  /* modal */
+  .modal{min-width:unset!important;padding:18px}
+  /* KOT grid */
+  .kot-grid{grid-template-columns:1fr!important}
+}
 </style>
 </head>
 <body>
+
+<!-- ══ MOBILE BOTTOM NAV ══ -->
+<div class="mobile-nav" id="mobileNav" style="display:none">
+  <button class="mob-nav-btn active" onclick="mobNav('order',this)" id="mn-order" style="position:relative">
+    <span class="mn-icon">🧾</span>Order
+    <span class="mob-cart-badge" id="cartBadge" style="display:none">0</span>
+  </button>
+  <button class="mob-nav-btn" onclick="mobNav('counter',this)" id="mn-counter"><span class="mn-icon">🪑</span>Tables</button>
+  <button class="mob-nav-btn" onclick="mobNav('kot',this)" id="mn-kot"><span class="mn-icon">👨‍🍳</span>KOT</button>
+  <button class="mob-nav-btn" onclick="mobNav('online',this)" id="mn-online"><span class="mn-icon">🛵</span>Online</button>
+  <button class="mob-nav-btn" onclick="toggleMobMore(this)" id="mn-more"><span class="mn-icon">⋯</span>More</button>
+</div>
+<div id="moreMenu" style="display:none;position:fixed;bottom:60px;left:0;right:0;background:#1f2937;z-index:299;padding:10px 6px;grid-template-columns:repeat(4,1fr);gap:6px">
+  <button class="mob-nav-btn" onclick="mobNav('inventory',null);closeMobMore()" style="color:rgba(255,255,255,.8)"><span class="mn-icon">📦</span>Stock</button>
+  <button class="mob-nav-btn" onclick="mobNav('menu',null);closeMobMore()" style="color:rgba(255,255,255,.8)"><span class="mn-icon">✏️</span>Menu Ed.</button>
+  <button class="mob-nav-btn" onclick="mobNav('reports',null);closeMobMore()" style="color:rgba(255,255,255,.8)"><span class="mn-icon">📊</span>Reports</button>
+  <button class="mob-nav-btn" onclick="logoutConfirm();closeMobMore()" style="color:rgba(255,255,255,.8)"><span class="mn-icon">🚪</span>Logout</button>
+</div>
 
 <!-- ══ LOGIN SCREEN ══════════════════════════════════════ -->
 <div id="loginScreen">
@@ -335,14 +423,19 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);fon
 
     <!-- ORDER -->
     <div class="page active" id="page-order">
-      <div class="menu-panel">
+      <!-- Mobile: Menu / Bill tab switcher -->
+      <div class="mob-tab-bar">
+        <button class="mob-tab-btn active" id="mobt-menu" onclick="setMobOrderTab('menu')">🍽 Menu</button>
+        <button class="mob-tab-btn" id="mobt-bill" onclick="setMobOrderTab('bill')">🧾 Bill <span id="mobBillCount" style="background:var(--accent);color:#fff;font-size:10px;padding:1px 6px;border-radius:20px;margin-left:4px;display:none">0</span></button>
+      </div>
+      <div class="menu-panel" id="menuPanelEl">
         <div class="menu-top">
           <div class="search-wrap"><input type="text" placeholder="Search dish or code…" oninput="filterMenu(this.value)" id="menuSearch"/></div>
           <div class="cat-pills" id="catPills"></div>
         </div>
         <div class="menu-grid" id="menuGrid"></div>
       </div>
-      <div class="bill-panel">
+      <div class="bill-panel" id="billPanelEl">
         <div class="bill-head">
           <select id="tableSelect" onchange="loadTable(this.value)"><option value="">-- Select Table --</option></select>
           <div class="icon-btn" title="Split Bill" onclick="splitBill()">⊘</div>
@@ -614,6 +707,13 @@ let onlineOrders = [
 
 let currentTable='',currentOrder={},discount={type:'none',value:0},activeCat='All',searchQ='',olTab='all';
 let editItemId=null;
+function updateMobCartBadge(){
+  const count=Object.values(currentOrder).reduce((a,i)=>a+i.qty,0);
+  const bc=document.getElementById('mobBillCount');
+  if(bc){bc.textContent=count;bc.style.display=count>0?'inline':'none';}
+  const cb=document.getElementById('cartBadge');
+  if(cb){cb.textContent=count;cb.style.display=count>0?'flex':'none';}
+}
 
 // ══ CLOCK ════════════════════════════════════════════════
 function tick(){const n=new Date();document.getElementById('clock').textContent=n.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});}
@@ -655,6 +755,11 @@ function pinSubmit(){
     document.getElementById('sidebarUser').style.background=currentStaff.color+'33';
     populateTableSelect();
     renderCats();renderMenu();renderMenuEditor();
+    // show mobile nav if on phone
+    if(isMobile()){
+      document.getElementById('mobileNav').style.display='flex';
+      setTimeout(()=>setMobOrderTab('menu'),100);
+    }
     toast('Welcome, '+currentStaff.name+'! 👋','success');
   } else {
     document.getElementById('pinErr').textContent='Incorrect PIN. Try again.';
@@ -774,6 +879,7 @@ function renderOrderPanel(){
   const dr=document.getElementById('t-disc-row');
   if(disc>0){dr.style.display='flex';document.getElementById('t-disc').textContent='-₹'+disc;}else dr.style.display='none';
   if(currentTable){const ts=tableStatus[currentTable];ts.amount=grand;ts.items=Object.values(currentOrder).reduce((a,i)=>a+i.qty,0);if(ts.items>0&&ts.status==='free')ts.status='occupied';}
+  updateMobCartBadge();
 }
 
 function applyDiscount(){
@@ -1214,6 +1320,75 @@ function toast(msg,type=''){
   el.textContent=msg;el.className='toast show'+(type?' '+type:'');
   clearTimeout(toastT);toastT=setTimeout(()=>el.classList.remove('show'),2600);
 }
+
+// ══ MOBILE NAV & RESPONSIVE ══════════════════════════════
+function isMobile(){return window.innerWidth<=640;}
+
+function mobNav(page, btn){
+  // close more menu
+  document.getElementById('moreMenu').style.display='none';
+  // update bottom nav active
+  document.querySelectorAll('.mob-nav-btn').forEach(b=>b.classList.remove('active'));
+  if(btn)btn.classList.add('active');
+  // navigate
+  showPage(page);
+  // if order page, show menu tab by default
+  if(page==='order') setMobOrderTab('menu');
+}
+
+let moreOpen=false;
+function toggleMobMore(btn){
+  moreOpen=!moreOpen;
+  const mm=document.getElementById('moreMenu');
+  mm.style.display=moreOpen?'grid':'none';
+  btn.classList.toggle('active',moreOpen);
+}
+function closeMobMore(){
+  moreOpen=false;
+  document.getElementById('moreMenu').style.display='none';
+  document.getElementById('mn-more').classList.remove('active');
+}
+
+// Mobile order tab: switch between Menu and Bill panels
+let mobOrderTab='menu';
+function setMobOrderTab(tab){
+  mobOrderTab=tab;
+  const mp=document.getElementById('menuPanelEl');
+  const bp=document.getElementById('billPanelEl');
+  const tm=document.getElementById('mobt-menu');
+  const tb=document.getElementById('mobt-bill');
+  if(!mp||!bp)return;
+  if(isMobile()){
+    if(tab==='menu'){
+      mp.classList.remove('mob-hidden');
+      bp.classList.add('mob-hidden');
+      tm&&tm.classList.add('active');
+      tb&&tb.classList.remove('active');
+    } else {
+      mp.classList.add('mob-hidden');
+      bp.classList.remove('mob-hidden');
+      tm&&tm.classList.remove('active');
+      tb&&tb.classList.add('active');
+    }
+  } else {
+    mp.classList.remove('mob-hidden');
+    bp.classList.remove('mob-hidden');
+  }
+}
+
+// on resize, reset panel visibility
+window.addEventListener('resize',()=>{
+  if(!isMobile()){
+    const mp=document.getElementById('menuPanelEl');
+    const bp=document.getElementById('billPanelEl');
+    if(mp)mp.classList.remove('mob-hidden');
+    if(bp)bp.classList.remove('mob-hidden');
+    document.getElementById('mobileNav').style.display='none';
+    document.getElementById('moreMenu').style.display='none';
+  } else if(!document.getElementById('loginScreen').classList.contains('hidden')===false){
+    document.getElementById('mobileNav').style.display='flex';
+  }
+});
 </script>
 </body>
 </html>
