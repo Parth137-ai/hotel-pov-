@@ -2,8 +2,27 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>Grand Palace Hotel — POS v2</title>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover"/>
+<title>Grand Palace Hotel — POS</title>
+
+<!-- PWA Meta Tags -->
+<meta name="application-name" content="GP Hotel POS"/>
+<meta name="description" content="Grand Palace Hotel — Restaurant POS System. Manage orders, billing, KOT, inventory and online orders."/>
+<meta name="theme-color" content="#111827"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="GP POS"/>
+<meta name="msapplication-TileColor" content="#111827"/>
+<meta name="msapplication-tap-highlight" content="no"/>
+
+<!-- PWA Manifest -->
+<link rel="manifest" href="manifest.json"/>
+
+<!-- Icons (inline SVG as data URI so single-file works too) -->
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%23E94560'/><text y='.9em' font-size='72' x='50%' text-anchor='middle' font-family='sans-serif' font-weight='bold' fill='white'>GP</text></svg>"/>
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%23E94560'/><text y='.9em' font-size='72' x='50%' text-anchor='middle' font-family='sans-serif' font-weight='bold' fill='white'>GP</text></svg>"/>
+
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -1388,6 +1407,103 @@ window.addEventListener('resize',()=>{
   } else if(!document.getElementById('loginScreen').classList.contains('hidden')===false){
     document.getElementById('mobileNav').style.display='flex';
   }
+});
+
+// ══ SERVICE WORKER — INLINE BLOB (works as single file too) ══
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>{
+    // Inline SW code as a string — no external sw.js needed
+    const swCode = `
+const CACHE='gp-pos-v3';
+const URLS=['/','/index.html'];
+self.addEventListener('install',e=>{
+  e.waitUntil(caches.open(CACHE).then(c=>Promise.allSettled(URLS.map(u=>c.add(u).catch(()=>{})))).then(()=>self.skipWaiting()));
+});
+self.addEventListener('activate',e=>{
+  e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim()));
+});
+self.addEventListener('fetch',e=>{
+  if(e.request.method!=='GET')return;
+  e.respondWith(
+    fetch(e.request).then(r=>{
+      if(r&&r.ok){const c=r.clone();caches.open(CACHE).then(cache=>cache.put(e.request,c));}
+      return r;
+    }).catch(()=>caches.match(e.request).then(r=>r||caches.match('/')))
+  );
+});
+console.log('[SW] Grand Palace Hotel POS v3 ready');
+`;
+    // Try registering from external file first (Vercel deployment)
+    // Fall back to inline Blob if file not found (local single-file use)
+    const tryRegister = (url) => navigator.serviceWorker.register(url)
+      .then(reg=>{
+        console.log('[SW] Registered:', url);
+        reg.addEventListener('updatefound',()=>{
+          const nw=reg.installing;
+          nw&&nw.addEventListener('statechange',()=>{
+            if(nw.state==='installed'&&navigator.serviceWorker.controller)
+              toast('App updated! Pull down to refresh.','info');
+          });
+        });
+      });
+
+    // Check if we're on a real server (not local file://)
+    if(location.protocol==='file:'){
+      // Local file — use blob URL
+      const blob=new Blob([swCode],{type:'application/javascript'});
+      tryRegister(URL.createObjectURL(blob)).catch(e=>console.log('[SW] Blob SW failed:',e));
+    } else {
+      // On server — try sw.js file, fallback to blob
+      tryRegister('sw.js').catch(()=>{
+        console.log('[SW] sw.js not found, using inline blob');
+        const blob=new Blob([swCode],{type:'application/javascript'});
+        tryRegister(URL.createObjectURL(blob)).catch(e=>console.log('[SW] All SW attempts failed:',e));
+      });
+    }
+  });
+}
+
+// ══ PWA INSTALL PROMPT ═══════════════════════════════════
+let deferredPrompt=null;
+window.addEventListener('beforeinstallprompt',(e)=>{
+  e.preventDefault();
+  deferredPrompt=e;
+  // Show install banner after 3 seconds if not installed
+  setTimeout(()=>{
+    if(deferredPrompt&&document.getElementById('loginScreen').classList.contains('hidden')){
+      showInstallBanner();
+    }
+  },3000);
+});
+
+function showInstallBanner(){
+  const existing=document.getElementById('installBanner');
+  if(existing)return;
+  const banner=document.createElement('div');
+  banner.id='installBanner';
+  banner.style.cssText='position:fixed;top:56px;left:0;right:0;background:#1D4ED8;color:#fff;padding:10px 16px;display:flex;align-items:center;gap:10px;z-index:400;font-size:13px;font-family:DM Sans,sans-serif;box-shadow:0 2px 12px rgba(0,0,0,.2)';
+  banner.innerHTML=`
+    <span style="font-size:20px">📲</span>
+    <span style="flex:1"><b>Install GP Hotel POS</b><br><span style="font-size:11px;opacity:.85">Add to home screen for offline access</span></span>
+    <button onclick="installPWA()" style="background:#fff;color:#1D4ED8;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">Install</button>
+    <button onclick="this.parentElement.remove()" style="background:none;border:none;color:#fff;font-size:20px;cursor:pointer;padding:0 4px;opacity:.7">×</button>`;
+  document.body.appendChild(banner);
+}
+
+function installPWA(){
+  if(!deferredPrompt)return;
+  deferredPrompt.prompt();
+  deferredPrompt.userChoice.then(choice=>{
+    if(choice.outcome==='accepted'){toast('App installed! 🎉 Find it on your home screen.','success');}
+    deferredPrompt=null;
+    const b=document.getElementById('installBanner');
+    if(b)b.remove();
+  });
+}
+
+window.addEventListener('appinstalled',()=>{
+  toast('Grand Palace Hotel POS installed successfully! 🏨','success');
+  deferredPrompt=null;
 });
 </script>
 </body>
