@@ -1,0 +1,5 @@
+{
+  "rewrites": [
+    { "source": "/", "destination": "/hotel_pos_v2.html" }
+  ]
+}
