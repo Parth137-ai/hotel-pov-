@@ -5,6 +5,13 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover"/>
 <title>Grand Palace Hotel — POS</title>
 
+<!-- ══ SUPABASE CONFIG ══ -->
+<script>
+  window.SUPABASE_URL = 'https://tkjnhrwsvjnnrfbntdwp.supabase.co';
+  window.SUPABASE_ANON_KEY = 'sb_publishable_BuRi73gXCmL6riVdA-V6ew_fz0i22zY';
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+
 <!-- PWA Meta Tags -->
 <meta name="application-name" content="GP Hotel POS"/>
 <meta name="description" content="Grand Palace Hotel — Restaurant POS System. Manage orders, billing, KOT, inventory and online orders."/>
@@ -430,6 +437,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);fon
     <span class="topbar-badge" id="pageSubtitle">Grand Palace Hotel · POS</span>
     <div class="topbar-right">
       <span class="shift-badge" onclick="endShift()">● Shift Open</span>
+      <span id="roleBadge" style="font-size:10px;padding:3px 10px;border-radius:20px;font-weight:700;display:none"></span>
       <span class="clock" id="clock">--:--</span>
       <div class="user-badge" id="topbarUser" onclick="logoutConfirm()">
         <div class="av" id="userAv" style="background:var(--accent)">?</div>
@@ -585,11 +593,33 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);fon
 
 <!-- RECEIPT MODAL -->
 <div class="modal-overlay" id="receiptModal">
-  <div class="modal" style="max-width:380px">
+  <div class="modal" style="max-width:400px">
     <h3>Bill Receipt <button class="modal-close" onclick="closeModal('receiptModal')">×</button></h3>
+
+    <!-- WhatsApp section -->
+    <div style="background:#ECFDF5;border:1px solid #A7F3D0;border-radius:10px;padding:12px 14px;margin-bottom:14px;display:flex;flex-direction:column;gap:8px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:20px">💬</span>
+        <span style="font-size:13px;font-weight:600;color:#065F46">Send Bill on WhatsApp</span>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <div style="display:flex;align-items:center;border:1px solid #A7F3D0;border-radius:8px;overflow:hidden;flex:1;background:#fff">
+          <span style="padding:0 10px;font-size:13px;color:#6B7280;border-right:1px solid #A7F3D0;background:#F9FAFB;height:100%;display:flex;align-items:center">+91</span>
+          <input type="tel" id="waPhone" placeholder="98765 43210" maxlength="10"
+            style="flex:1;border:none;padding:8px 12px;font-size:13px;outline:none;font-family:'DM Sans',sans-serif;background:transparent"
+            oninput="this.value=this.value.replace(/\D/g,'').slice(0,10)"
+          />
+        </div>
+        <button onclick="sendWhatsAppBill()" style="background:#25D366;color:#fff;border:none;border-radius:8px;padding:9px 16px;font-size:12px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;white-space:nowrap;display:flex;align-items:center;gap:6px">
+          <span>📤</span> Send
+        </button>
+      </div>
+      <div id="waStatus" style="font-size:11px;color:#065F46;display:none"></div>
+    </div>
+
     <div class="receipt" id="receiptContent"></div>
     <div class="modal-actions">
-      <button class="btn success" onclick="finalizeBill()">Confirm & Save Bill</button>
+      <button class="btn success" onclick="finalizeBill()">✓ Confirm & Save Bill</button>
       <button class="btn" onclick="closeModal('receiptModal')">Cancel</button>
     </div>
   </div>
@@ -734,17 +764,226 @@ function updateMobCartBadge(){
   if(cb){cb.textContent=count;cb.style.display=count>0?'flex':'none';}
 }
 
+// ══ SUPABASE INIT ═════════════════════════════════════════
+let sb=null;
+let sbReady=false;
+
+function initSupabase(){
+  try{
+    if(!window.supabase||!window.SUPABASE_URL||window.SUPABASE_URL.includes('YOUR_PROJECT')){
+      console.log('[SB] No Supabase config — running in local mode');
+      sbReady=false;return;
+    }
+    sb=window.supabase.createClient(window.SUPABASE_URL,window.SUPABASE_ANON_KEY);
+    sbReady=true;
+    console.log('[SB] Supabase connected ✓');
+  }catch(e){console.warn('[SB] Init failed:',e);sbReady=false;}
+}
+
+// Load all data from Supabase, fall back to local if offline/unconfigured
+async function loadFromSupabase(){
+  if(!sbReady)return;
+  try{
+    // Load staff
+    const{data:staffData}=await sb.from('staff').select('*').eq('active',true).order('name');
+    if(staffData&&staffData.length){
+      STAFF=staffData.map(s=>({...s,pin:s.pin}));
+      renderStaffGrid();
+    }
+    // Load menu
+    const{data:menuData}=await sb.from('menu_items').select('*').eq('active',true).order('category');
+    if(menuData&&menuData.length){
+      MENU=menuData.map(m=>({id:m.id,name:m.name,price:parseFloat(m.price),cat:m.category,veg:m.is_veg,code:m.code,active:m.active,gst:parseFloat(m.gst_rate)}));
+      renderCats();renderMenu();renderMenuEditor();
+    }
+    // Load tables
+    const{data:tablesData}=await sb.from('tables').select('*').order('label');
+    if(tablesData&&tablesData.length){
+      TABLES.length=0;
+      tablesData.forEach(t=>{
+        TABLES.push({id:t.id,label:t.label,type:t.type,seats:t.seats});
+        tableStatus[t.label]={status:t.status,amount:parseFloat(t.amount||0),items:t.items_count||0,since:t.occupied_since,order:{}};
+      });
+      populateTableSelect();
+    }
+    // Load bills (today)
+    const today=new Date().toISOString().slice(0,10);
+    const{data:billsData}=await sb.from('bills').select('*').gte('created_at',today).order('created_at',{ascending:false});
+    if(billsData){
+      bills=billsData.map(b=>({id:b.bill_number,table:b.table_label,time:new Date(b.created_at).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),items:b.items_count,amount:parseFloat(b.grand_total),status:b.status,staff:b.staff_name}));
+    }
+    // Load KOTs
+    const{data:kotData}=await sb.from('kots').select('*').eq('status','pending').order('created_at');
+    if(kotData){
+      kots=kotData.map(k=>({id:k.id,table:k.table_label,time:new Date(k.created_at).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),items:k.items,urgent:k.urgent}));
+    }
+    // Load online orders (today)
+    const{data:onlineData}=await sb.from('online_orders').select('*').gte('created_at',today).order('created_at',{ascending:false});
+    if(onlineData){
+      onlineOrders=onlineData.map(o=>({id:o.order_ref,platform:o.platform,customer:o.customer,address:o.address,items:o.items,amount:parseFloat(o.amount),status:o.status,time:new Date(o.created_at).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}));
+    }
+    // Load inventory
+    const{data:invData}=await sb.from('inventory').select('*').order('name');
+    if(invData){
+      INVENTORY=invData.map(i=>({id:i.id,name:i.name,unit:i.unit,stock:parseFloat(i.stock),min:parseFloat(i.min_stock),max:parseFloat(i.max_stock)}));
+    }
+    toast('Data loaded from Supabase ✓','success');
+  }catch(e){console.warn('[SB] Load error:',e);toast('Running in offline mode','info');}
+}
+
+// ══ SUPABASE REALTIME SUBSCRIPTIONS ═══════════════════════
+function subscribeRealtime(){
+  if(!sbReady)return;
+  // Tables — when any device changes a table status
+  sb.channel('tables-channel')
+    .on('postgres_changes',{event:'UPDATE',schema:'public',table:'tables'},payload=>{
+      const t=payload.new;
+      tableStatus[t.label]={status:t.status,amount:parseFloat(t.amount||0),items:t.items_count||0,since:t.occupied_since,order:tableStatus[t.label]?.order||{}};
+      if(document.getElementById('page-counter').classList.contains('active'))renderCounter();
+      toast('Table updated: '+t.label,'info');
+    }).subscribe();
+
+  // KOTs — kitchen gets new tickets instantly
+  sb.channel('kots-channel')
+    .on('postgres_changes',{event:'INSERT',schema:'public',table:'kots'},payload=>{
+      const k=payload.new;
+      kots.unshift({id:k.id,table:k.table_label,time:new Date(k.created_at).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),items:k.items,urgent:k.urgent});
+      if(document.getElementById('page-kot').classList.contains('active'))renderKot();
+      toast('New KOT: '+k.table_label,'info');
+    })
+    .on('postgres_changes',{event:'UPDATE',schema:'public',table:'kots'},payload=>{
+      const k=payload.new;
+      const idx=kots.findIndex(x=>x.id===k.id);
+      if(idx>-1&&k.status!=='pending')kots.splice(idx,1);
+      if(document.getElementById('page-kot').classList.contains('active'))renderKot();
+    }).subscribe();
+
+  // Bills — cashier sees new bills from waiters instantly
+  sb.channel('bills-channel')
+    .on('postgres_changes',{event:'INSERT',schema:'public',table:'bills'},payload=>{
+      const b=payload.new;
+      bills.unshift({id:b.bill_number,table:b.table_label,time:new Date(b.created_at).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),items:b.items_count,amount:parseFloat(b.grand_total),status:b.status,staff:b.staff_name});
+      if(document.getElementById('page-reports').classList.contains('active'))renderReports();
+    })
+    .on('postgres_changes',{event:'UPDATE',schema:'public',table:'bills'},payload=>{
+      const b=payload.new;
+      const idx=bills.findIndex(x=>x.id===b.bill_number);
+      if(idx>-1)bills[idx].status=b.status;
+      if(document.getElementById('page-reports').classList.contains('active'))renderReports();
+      toast('Bill '+b.bill_number+' updated: '+b.status,'info');
+    }).subscribe();
+
+  // Online orders — new Swiggy/Zomato orders push to all devices
+  sb.channel('online-channel')
+    .on('postgres_changes',{event:'INSERT',schema:'public',table:'online_orders'},payload=>{
+      const o=payload.new;
+      onlineOrders.unshift({id:o.order_ref,platform:o.platform,customer:o.customer,address:o.address,items:o.items,amount:parseFloat(o.amount),status:o.status,time:new Date(o.created_at).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})});
+      if(document.getElementById('page-online').classList.contains('active'))renderOnline();
+      toast('New '+o.platform+' order: ₹'+o.amount,'info');
+    })
+    .on('postgres_changes',{event:'UPDATE',schema:'public',table:'online_orders'},payload=>{
+      const o=payload.new;
+      const idx=onlineOrders.findIndex(x=>x.id===o.order_ref);
+      if(idx>-1)onlineOrders[idx].status=o.status;
+      if(document.getElementById('page-online').classList.contains('active'))renderOnline();
+    }).subscribe();
+
+  console.log('[SB] Realtime subscriptions active ✓');
+}
+
+// ══ SUPABASE WRITE HELPERS ════════════════════════════════
+async function sbSaveTableStatus(tableLabel,status,amount,items,since){
+  if(!sbReady)return;
+  try{
+    await sb.from('tables').update({status,amount,items_count:items,occupied_since:since,updated_at:new Date().toISOString()}).eq('label',tableLabel);
+  }catch(e){console.warn('[SB] Table update failed:',e);}
+}
+
+async function sbSaveKOT(tableLabel,orderItems){
+  if(!sbReady)return null;
+  try{
+    const items=orderItems.map(i=>({n:i.name,q:i.qty}));
+    const{data,error}=await sb.from('kots').insert({table_label:tableLabel,items,status:'pending',urgent:false}).select().single();
+    if(error)throw error;
+    return data;
+  }catch(e){console.warn('[SB] KOT save failed:',e);return null;}
+}
+
+async function sbUpdateKOT(id,status){
+  if(!sbReady)return;
+  try{await sb.from('kots').update({status}).eq('id',id);}
+  catch(e){console.warn('[SB] KOT update failed:',e);}
+}
+
+async function sbSaveBill(billData){
+  if(!sbReady)return null;
+  try{
+    const{data,error}=await sb.from('bills').insert({
+      bill_number:billData.id,table_label:billData.table,staff_name:billData.staff,
+      items_count:billData.items,subtotal:billData.sub,discount:billData.disc||0,
+      cgst:billData.cgst,sgst:billData.sgst,grand_total:billData.amount,
+      status:'pending',payment_mode:'cash'
+    }).select().single();
+    if(error)throw error;
+    return data;
+  }catch(e){console.warn('[SB] Bill save failed:',e);return null;}
+}
+
+async function sbUpdateBill(billNumber,status){
+  if(!sbReady)return;
+  try{await sb.from('bills').update({status}).eq('bill_number',billNumber);}
+  catch(e){console.warn('[SB] Bill update failed:',e);}
+}
+
+async function sbUpdateOnlineOrder(orderRef,status){
+  if(!sbReady)return;
+  try{await sb.from('online_orders').update({status,updated_at:new Date().toISOString()}).eq('order_ref',orderRef);}
+  catch(e){console.warn('[SB] Online order update failed:',e);}
+}
+
+async function sbSaveMenuItem(item){
+  if(!sbReady)return null;
+  try{
+    const{data,error}=await sb.from('menu_items').upsert({name:item.name,price:item.price,category:item.cat,is_veg:item.veg,code:item.code,active:item.active,gst_rate:item.gst||5}).select().single();
+    if(error)throw error;
+    return data;
+  }catch(e){console.warn('[SB] Menu save failed:',e);return null;}
+}
+
+async function sbToggleMenuItem(code,active){
+  if(!sbReady)return;
+  try{await sb.from('menu_items').update({active}).eq('code',code);}
+  catch(e){console.warn('[SB] Menu toggle failed:',e);}
+}
+
+async function sbUpdateInventory(id,stock){
+  if(!sbReady)return;
+  try{await sb.from('inventory').update({stock,updated_at:new Date().toISOString()}).eq('id',id);}
+  catch(e){console.warn('[SB] Inventory update failed:',e);}
+}
+
 // ══ CLOCK ════════════════════════════════════════════════
 function tick(){const n=new Date();document.getElementById('clock').textContent=n.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});}
 setInterval(tick,1000);tick();
 
 // ══ LOGIN ════════════════════════════════════════════════
+const ROLE_COLORS={
+  'Manager':'#E94560','Supervisor':'#8B5CF6',
+  'Chef':'#F59E0B','Cashier':'#3B82F6',
+  'Waiter':'#10B981'
+};
+const ROLE_PAGES_LABEL={
+  'Manager':'All pages','Supervisor':'All pages',
+  'Chef':'KOT · Stock · Online','Cashier':'Orders · Bills',
+  'Waiter':'Tables · Menu'
+};
 function renderStaffGrid(){
   document.getElementById('staffGrid').innerHTML=STAFF.map(s=>`
     <div class="staff-card" onclick="selectStaff('${s.id}')">
       <div class="staff-avatar" style="background:${s.color}20;border:2px solid ${s.color}40">${s.emoji}</div>
       <div class="staff-name">${s.name}</div>
       <div class="staff-role">${s.role}</div>
+      <div style="margin-top:6px;font-size:9px;color:rgba(255,255,255,.35);letter-spacing:.5px">${ROLE_PAGES_LABEL[s.role]||''}</div>
     </div>`).join('');
 }
 renderStaffGrid();
@@ -774,6 +1013,11 @@ function pinSubmit(){
     document.getElementById('sidebarUser').style.background=currentStaff.color+'33';
     populateTableSelect();
     renderCats();renderMenu();renderMenuEditor();
+    // init Supabase and load real data
+    initSupabase();
+    loadFromSupabase().then(()=>subscribeRealtime());
+    // apply role-based access — hides/shows nav and lands on correct page
+    applyRoleAccess();
     // show mobile nav if on phone
     if(isMobile()){
       document.getElementById('mobileNav').style.display='flex';
@@ -786,19 +1030,136 @@ function pinSubmit(){
     document.getElementById('pinDisplay').textContent='_ _ _ _';
   }
 }
-function logoutConfirm(){if(confirm('End session and logout?')){document.getElementById('loginScreen').classList.remove('hidden');document.getElementById('appSidebar').style.display='none';document.getElementById('appMain').style.display='none';currentStaff=null;document.getElementById('pinModal').style.display='none';document.getElementById('staffGrid').style.display='grid';}}
+function logoutConfirm(){if(confirm('End session and logout?')){
+  document.getElementById('loginScreen').classList.remove('hidden');
+  document.getElementById('appSidebar').style.display='none';
+  document.getElementById('appMain').style.display='none';
+  const rb=document.getElementById('roleBadge');if(rb)rb.style.display='none';
+  currentStaff=null;
+  document.getElementById('pinModal').style.display='none';
+  document.getElementById('staffGrid').style.display='grid';
+}}
 function endShift(){if(confirm('End current shift and generate shift report?')){downloadShiftReport();toast('Shift ended. Report downloaded.','info');}}
 
 // ══ NAVIGATION ═══════════════════════════════════════════
 const pgMeta={order:{t:'New Order',s:'Take orders, send KOT, generate bills'},counter:{t:'Counter / Tables',s:'Live table status overview'},kot:{t:'Kitchen KOT',s:'Monitor kitchen order tickets'},online:{t:'Online Orders',s:'Swiggy & Zomato orders'},inventory:{t:'Inventory',s:'Stock levels and deductions'},menu:{t:'Menu Editor',s:'Add, edit, toggle menu items'},reports:{t:'Reports & Bills',s:'Sales reports and shift data'}};
+
+// ── Role → allowed pages ──────────────────────────────────
+// page ids: order, counter, kot, online, inventory, menu, reports
+const ROLE_ACCESS = {
+  'Manager':    ['order','counter','kot','online','inventory','menu','reports'],
+  'Supervisor': ['order','counter','kot','online','inventory','menu','reports'],
+  'Chef':       ['kot','inventory','online'],
+  'Cashier':    ['order','reports'],
+  'Waiter':     ['order','counter'],
+};
+
+// Nav button ids map
+const NAV_IDS = {
+  order:'nb-order', counter:'nb-counter', kot:'nb-kot',
+  online:'nb-online', inventory:'nb-inventory', menu:'nb-menu', reports:'nb-reports'
+};
+// Mobile nav ids
+const MOB_IDS = {
+  order:'mn-order', counter:'mn-counter', kot:'mn-kot',
+  online:'mn-online'
+};
+
+// Role-specific welcome messages
+const ROLE_WELCOME = {
+  'Manager':    'All modules unlocked 🗝️',
+  'Supervisor': 'All modules unlocked 🗝️',
+  'Chef':       'KOT, Inventory & Online Orders 👨‍🍳',
+  'Cashier':    'Billing & Reports 💳',
+  'Waiter':     'Tables & Menu 🍽️',
+};
+
+function applyRoleAccess(){
+  const role = currentStaff?.role || 'Waiter';
+  const allowed = ROLE_ACCESS[role] || ROLE_ACCESS['Waiter'];
+
+  // ── Desktop sidebar nav buttons ──
+  Object.entries(NAV_IDS).forEach(([page, btnId])=>{
+    const btn = document.getElementById(btnId);
+    if(!btn) return;
+    if(allowed.includes(page)){
+      btn.style.display = 'flex';
+      btn.style.opacity = '1';
+      btn.style.pointerEvents = 'auto';
+    } else {
+      btn.style.display = 'none';
+    }
+  });
+
+  // ── Mobile bottom nav ──
+  // Rebuild mobile nav based on allowed pages
+  const mobileNav = document.getElementById('mobileNav');
+  if(mobileNav){
+    // Primary mobile tabs (max 4 + more)
+    const mobPrimary = ['order','counter','kot','online'].filter(p=>allowed.includes(p));
+    const mobExtra   = ['inventory','menu','reports'].filter(p=>allowed.includes(p));
+
+    // Rebuild mobile nav buttons
+    let mobHtml = '';
+    mobPrimary.forEach(p=>{
+      const icons={order:'🧾',counter:'🪑',kot:'👨‍🍳',online:'🛵'};
+      const labels={order:'Order',counter:'Tables',kot:'KOT',online:'Online'};
+      mobHtml += `<button class="mob-nav-btn" onclick="mobNav('${p}',this)" id="mn-${p}" style="position:relative">
+        <span class="mn-icon">${icons[p]}</span>${labels[p]}
+        ${p==='order'?'<span class="mob-cart-badge" id="cartBadge" style="display:none">0</span>':''}
+      </button>`;
+    });
+    if(mobExtra.length){
+      mobHtml += `<button class="mob-nav-btn" onclick="toggleMobMore(this)" id="mn-more"><span class="mn-icon">⋯</span>More</button>`;
+    }
+    mobileNav.innerHTML = mobHtml;
+
+    // Rebuild more menu
+    const moreMenu = document.getElementById('moreMenu');
+    if(moreMenu){
+      const extraIcons={inventory:'📦',menu:'✏️',reports:'📊'};
+      const extraLabels={inventory:'Stock',menu:'Menu Ed.',reports:'Reports'};
+      moreMenu.innerHTML = mobExtra.map(p=>`
+        <button class="mob-nav-btn" onclick="mobNav('${p}',null);closeMobMore()" style="color:rgba(255,255,255,.8)">
+          <span class="mn-icon">${extraIcons[p]}</span>${extraLabels[p]}
+        </button>`).join('') +
+        `<button class="mob-nav-btn" onclick="logoutConfirm();closeMobMore()" style="color:rgba(255,255,255,.8)"><span class="mn-icon">🚪</span>Logout</button>`;
+    }
+  }
+
+  // ── Navigate to first allowed page ──
+  const firstPage = allowed[0] || 'order';
+  showPage(firstPage);
+
+  // ── Role badge in topbar ──
+  const roleBadge = document.getElementById('roleBadge');
+  if(roleBadge){
+    roleBadge.textContent = role;
+    roleBadge.style.display = 'inline';
+    roleBadge.style.background = (ROLE_COLORS[role]||'#6B7280')+'22';
+    roleBadge.style.color = ROLE_COLORS[role]||'#6B7280';
+    roleBadge.style.border = '1px solid '+(ROLE_COLORS[role]||'#6B7280')+'44';
+  }
+  const badge = document.getElementById('pageSubtitle');
+  if(badge) badge.textContent = ROLE_WELCOME[role] || pgMeta[firstPage].s;
+}
+
 function showPage(p){
+  // Block access if role not allowed
+  const role = currentStaff?.role || 'Waiter';
+  const allowed = ROLE_ACCESS[role] || ROLE_ACCESS['Waiter'];
+  if(!allowed.includes(p)){
+    toast('Access denied for your role','error');
+    return;
+  }
   document.querySelectorAll('.page,.page-scroll').forEach(e=>e.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(e=>e.classList.remove('active'));
   const pg=document.getElementById('page-'+p);
-  pg.classList.add('active');
-  document.getElementById('nb-'+p).classList.add('active');
-  document.getElementById('pageTitle').textContent=pgMeta[p].t;
-  document.getElementById('pageSubtitle').textContent=pgMeta[p].s;
+  if(pg) pg.classList.add('active');
+  const nb=document.getElementById('nb-'+p);
+  if(nb) nb.classList.add('active');
+  document.getElementById('pageTitle').textContent=pgMeta[p]?.t||p;
+  document.getElementById('pageSubtitle').textContent=pgMeta[p]?.s||'';
   if(p==='counter')renderCounter();
   if(p==='reports')renderReports();
   if(p==='kot')renderKot();
@@ -917,6 +1278,8 @@ function sendKOT(){
   const tbl=TABLES.find(t=>t.id===currentTable);
   kots.push({id:'K-00'+kotSeq++,table:tbl?tbl.label:currentTable,time:new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),items:Object.values(currentOrder).map(i=>({n:i.name,q:i.qty})),urgent:false});
   tableStatus[currentTable].status='occupied';
+  // save KOT to Supabase (all devices see it instantly via realtime)
+  sbSaveKOT(tbl?tbl.label:currentTable,Object.values(currentOrder));
   // auto inventory deduction
   Object.values(currentOrder).forEach(i=>{
     deductionLog.unshift({item:i.name,reason:i.name+' ×'+i.qty,qty:'auto',time:new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})});
@@ -924,7 +1287,10 @@ function sendKOT(){
   toast('KOT sent to kitchen! 🍳','success');
 }
 
-// ══ RECEIPT ══════════════════════════════════════════════
+// ══ RECEIPT & WHATSAPP ═══════════════════════════════════
+// Store bill text globally so WhatsApp can access it anytime
+let currentBillText = '';
+
 function openReceiptModal(){
   if(!Object.keys(currentOrder).length){toast('No items','error');return;}
   const tbl=TABLES.find(t=>t.id===currentTable)||{label:currentTable};
@@ -959,15 +1325,97 @@ function openReceiptModal(){
     '     Thank you! Visit again.',
     '      ★ Grand Palace Hotel ★',
   ].join('\n');
+  currentBillText = lines;
   document.getElementById('receiptContent').textContent=lines;
+  // clear previous phone & status
+  const ph=document.getElementById('waPhone');if(ph)ph.value='';
+  const ws=document.getElementById('waStatus');if(ws)ws.style.display='none';
   document.getElementById('receiptModal').classList.add('show');
+}
+
+// ── WhatsApp Bill Sender ──────────────────────────────────
+function sendWhatsAppBill(){
+  const phoneEl = document.getElementById('waPhone');
+  const statusEl = document.getElementById('waStatus');
+  const phone = (phoneEl?.value||'').replace(/\D/g,'');
+
+  if(phone.length!==10){
+    statusEl.textContent='⚠ Enter a valid 10-digit mobile number';
+    statusEl.style.color='#DC2626';
+    statusEl.style.display='block';
+    phoneEl.focus();
+    return;
+  }
+
+  // Build a clean WhatsApp-friendly bill message
+  const tbl = TABLES.find(t=>t.id===currentTable)||{label:currentTable};
+  const {sub,disc,cgst,sgst,grand} = calcTotals();
+  const now = new Date();
+  const billNo = 'B-'+String(billSeq).padStart(4,'0');
+
+  let msg = '';
+  msg += `🏨 *GRAND PALACE HOTEL*\n`;
+  msg += `📍 MG Road, Ahmedabad - 380001\n`;
+  msg += `📞 +91 79 2660 1234\n`;
+  msg += `━━━━━━━━━━━━━━━━━━━━\n`;
+  msg += `🧾 *Bill No:* ${billNo}\n`;
+  msg += `🪑 *Table:*  ${tbl.label}\n`;
+  msg += `📅 *Date:*   ${now.toLocaleDateString('en-IN')}\n`;
+  msg += `🕐 *Time:*   ${now.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}\n`;
+  msg += `👤 *Staff:*  ${currentStaff?currentStaff.name:'Admin'}\n`;
+  msg += `━━━━━━━━━━━━━━━━━━━━\n`;
+  msg += `*ITEMS ORDERED*\n`;
+
+  Object.values(currentOrder).forEach(i=>{
+    msg += `▸ ${i.name} × ${i.qty}  →  ₹${i.price*i.qty}\n`;
+  });
+
+  msg += `━━━━━━━━━━━━━━━━━━━━\n`;
+  msg += `Subtotal:     ₹${sub}\n`;
+  if(disc>0) msg += `Discount:    -₹${disc}\n`;
+  msg += `CGST @2.5%:   ₹${cgst.toFixed(2)}\n`;
+  msg += `SGST @2.5%:   ₹${sgst.toFixed(2)}\n`;
+  msg += `━━━━━━━━━━━━━━━━━━━━\n`;
+  msg += `💰 *TOTAL: ₹${grand}*\n`;
+  msg += `━━━━━━━━━━━━━━━━━━━━\n`;
+  msg += `✅ Payment: Cash / Card / UPI\n`;
+  msg += `\n🙏 *Thank you for dining with us!*\n`;
+  msg += `⭐ We hope to see you again soon.\n`;
+  msg += `📲 Feedback: wa.me/917926601234`;
+
+  // Build WhatsApp URL — works on mobile, desktop, PWA
+  const waNum = '91' + phone; // India +91 country code
+  const encoded = encodeURIComponent(msg);
+
+  // Try WhatsApp app first (wa.me), fallback to web.whatsapp.com
+  const waUrl = `https://wa.me/${waNum}?text=${encoded}`;
+
+  // Use anchor click — works even when window.open is blocked by PWA/browser
+  const a = document.createElement('a');
+  a.href = waUrl;
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+
+  // Show success status
+  statusEl.textContent = `✓ WhatsApp opened for +91 ${phone.replace(/(\d{5})(\d{5})/,'$1 $2')}`;
+  statusEl.style.color = '#065F46';
+  statusEl.style.display = 'block';
+  toast('Bill sent to +91 '+phone+' on WhatsApp! 📲','success');
 }
 function finalizeBill(){
   const tbl=TABLES.find(t=>t.id===currentTable)||{label:currentTable};
-  const{grand}=calcTotals();
+  const{sub,disc:discAmt,cgst,sgst,grand}=calcTotals();
   const items=Object.values(currentOrder).reduce((a,i)=>a+i.qty,0);
-  bills.unshift({id:'B-'+String(billSeq++).padStart(4,'0'),table:tbl.label,time:new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),items,amount:grand,status:'pending',staff:currentStaff?currentStaff.name:'Admin'});
+  const billId='B-'+String(billSeq++).padStart(4,'0');
+  bills.unshift({id:billId,table:tbl.label,time:new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),items,amount:grand,status:'pending',staff:currentStaff?currentStaff.name:'Admin'});
   tableStatus[currentTable]={status:'occupied',amount:grand,items,since:new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),order:currentOrder};
+  // save bill + update table status in Supabase
+  const billObj={id:billId,table:tbl.label,staff:currentStaff?currentStaff.name:'Admin',items,sub,disc:discAmt||0,cgst,sgst,amount:grand};
+  sbSaveBill(billObj);
+  sbSaveTableStatus(tbl.label,'occupied',grand,items,bills[0].time);
   closeModal('receiptModal');
   toast('Bill saved! Collect payment.','success');
 }
@@ -1031,8 +1479,18 @@ function renderKot(){
       </div>
     </div>`).join('');
 }
-function kotReady(i){kots.splice(i,1);toast('KOT ready — serve to table! 🍽️','success');renderKot();}
-function kotVoid(i){if(confirm('Void this KOT?')){kots.splice(i,1);toast('KOT voided');renderKot();}}
+function kotReady(i){
+  const k=kots[i];
+  sbUpdateKOT(k.id,'ready');
+  kots.splice(i,1);toast('KOT ready — serve to table! 🍽️','success');renderKot();
+}
+function kotVoid(i){
+  if(confirm('Void this KOT?')){
+    const k=kots[i];
+    sbUpdateKOT(k.id,'void');
+    kots.splice(i,1);toast('KOT voided');renderKot();
+  }
+}
 
 // ══ ONLINE ORDERS ════════════════════════════════════════
 function setOlTab(tab,el){
@@ -1081,6 +1539,8 @@ function olAction(i,status){
   if(realIdx>-1){onlineOrders[realIdx].status=status;}
   const msgs={preparing:'Order accepted & sent to kitchen! 🍳',rejected:'Order rejected.',ready:'Order ready for pickup! 📦',delivered:'Delivered! ✓'};
   toast(msgs[status]||status,status==='preparing'||status==='ready'||status==='delivered'?'success':'error');
+  // update Supabase — all devices see the status change instantly
+  sbUpdateOnlineOrder(order.id,status);
   renderOnline();
 }
 
@@ -1116,6 +1576,7 @@ function quickRestock(id){
   const qty=prompt(`Restock "${inv.name}" — Enter quantity (${inv.unit}):`);
   if(qty&&!isNaN(qty)&&parseFloat(qty)>0){
     inv.stock=Math.min(inv.stock+parseFloat(qty),inv.max);
+    sbUpdateInventory(inv.id,inv.stock);
     toast(`${inv.name} restocked by ${qty} ${inv.unit} ✓`,'success');
     renderInventory();
   }
@@ -1238,14 +1699,47 @@ function renderReports(){
       <div style="color:var(--muted)">${b.time}</div>
       <div style="color:var(--muted)">${b.items}</div>
       <div style="font-weight:800">₹${b.amount.toLocaleString('en-IN')}</div>
-      <div style="display:flex;align-items:center;gap:6px">
+      <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap">
         <span class="status-pill ${b.status==='paid'?'sp-paid':b.status==='void'?'sp-void':'sp-pending'}">${b.status.charAt(0).toUpperCase()+b.status.slice(1)}</span>
         ${b.status==='pending'?`<button class="pay-btn-sm" onclick="markPaidReport('${b.id}')">Pay</button>`:''}
+        <button onclick="resendWhatsApp('${b.id}')" title="Send bill on WhatsApp" style="background:#25D366;border:none;border-radius:5px;padding:3px 8px;font-size:11px;color:#fff;cursor:pointer;font-weight:600">📲</button>
       </div>
     </div>`).join('');
 }
 
-// ══ SHIFT REPORT PDF ═════════════════════════════════════
+// Resend bill from history via WhatsApp
+function resendWhatsApp(billId){
+  const b = bills.find(x=>x.id===billId);
+  if(!b){toast('Bill not found','error');return;}
+  const phone = prompt(`Enter customer WhatsApp number (10 digits) to resend ${billId}:`,'');
+  if(!phone) return;
+  const clean = phone.replace(/\D/g,'');
+  if(clean.length!==10){toast('Invalid number — enter 10 digits','error');return;}
+
+  let msg = '';
+  msg += `🏨 *GRAND PALACE HOTEL*\n`;
+  msg += `📍 MG Road, Ahmedabad - 380001\n`;
+  msg += `━━━━━━━━━━━━━━━━━━━━\n`;
+  msg += `🧾 *Bill No:* ${b.id}\n`;
+  msg += `🪑 *Table:*  ${b.table}\n`;
+  msg += `🕐 *Time:*   ${b.time}\n`;
+  msg += `👤 *Staff:*  ${b.staff||'Admin'}\n`;
+  msg += `━━━━━━━━━━━━━━━━━━━━\n`;
+  msg += `💰 *TOTAL: ₹${b.amount.toLocaleString('en-IN')}*\n`;
+  msg += `━━━━━━━━━━━━━━━━━━━━\n`;
+  msg += `✅ Status: ${b.status.charAt(0).toUpperCase()+b.status.slice(1)}\n`;
+  msg += `\n🙏 *Thank you for dining at Grand Palace Hotel!*`;
+
+  const waUrl = `https://wa.me/91${clean}?text=${encodeURIComponent(msg)}`;
+  const a = document.createElement('a');
+  a.href = waUrl;
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  toast('WhatsApp opened for +91 '+clean+' 📲','success');
+}
 function downloadShiftReport(){
   const now=new Date();
   const paid=bills.filter(b=>b.status==='paid');
