@@ -11,16 +11,17 @@ const io = new Server(server, { cors: { origin: '*' } });
 
 app.use(cors());
 
-// Serve static files from the src directory
-app.use(express.static(path.join(__dirname)));
-app.use('/assets', express.static(path.join(__dirname, 'assets')));
-app.use('/styles', express.static(path.join(__dirname, 'styles')));
-app.use('/services', express.static(path.join(__dirname, 'services')));
-app.use('/utils', express.static(path.join(__dirname, 'utils')));
-app.use('/js', express.static(path.join(__dirname, 'js')));
+const PUBLIC_DIR = path.join(__dirname, '..', 'public');
+
+app.use(express.static(PUBLIC_DIR));
+app.use('/assets', express.static(path.join(PUBLIC_DIR, 'assets')));
+app.use('/styles', express.static(path.join(PUBLIC_DIR, 'styles')));
+app.use('/services', express.static(path.join(PUBLIC_DIR, 'services')));
+app.use('/utils', express.static(path.join(PUBLIC_DIR, 'utils')));
+app.use('/js', express.static(path.join(PUBLIC_DIR, 'js')));
 
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'pages', 'index.html'));
+  res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
 });
 
 const DATA_DIR = process.env.VERCEL ? '/tmp' : path.join(__dirname, 'data');
