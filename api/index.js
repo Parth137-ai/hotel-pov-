@@ -11,7 +11,7 @@ const io = new Server(server, { cors: { origin: '*' } });
 
 app.use(cors());
 
-const PUBLIC_DIR = path.join(__dirname, '..', 'public');
+const PUBLIC_DIR = path.join(__dirname, '..');
 
 app.use(express.static(PUBLIC_DIR));
 app.use('/assets', express.static(path.join(PUBLIC_DIR, 'assets')));
@@ -24,7 +24,7 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
 });
 
-const DATA_DIR = process.env.VERCEL ? '/tmp' : path.join(__dirname, 'data');
+const DATA_DIR = process.env.VERCEL ? '/tmp' : path.join(__dirname, '..', 'src', 'data');
 const DATA_FILE = path.join(DATA_DIR, 'pos_data.json');
 
 if (!process.env.VERCEL && !fs.existsSync(DATA_DIR)) {
