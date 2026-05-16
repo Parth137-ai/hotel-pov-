@@ -4,14 +4,6 @@
     {
       "source": "/socket.io/(.*)",
       "destination": "/api/index.js"
-    },
-    {
-      "source": "/(api|services|utils|styles|js|assets|manifest.json|sw.js)(.*)",
-      "destination": "/$1$2"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/api/index.js"
     }
   ]
 }
