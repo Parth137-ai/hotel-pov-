@@ -1,31 +1,43 @@
 {
-  "rewrites": [
-    { "source": "/sw.js", "destination": "/sw.js" },
-    { "source": "/manifest.json", "destination": "/manifest.json" },
-    { "source": "/(.*)", "destination": "/index.html" }
+  "version": 2,
+  "builds": [
+    {
+      "src": "src/server.js",
+      "use": "@vercel/node"
+    }
   ],
-  "headers": [
+  "routes": [
     {
-      "source": "/sw.js",
-      "headers": [
-        { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" },
-        { "key": "Service-Worker-Allowed", "value": "/" }
-      ]
+      "src": "/styles/(.*)",
+      "dest": "/src/styles/$1"
     },
     {
-      "source": "/manifest.json",
-      "headers": [
-        { "key": "Content-Type", "value": "application/manifest+json" },
-        { "key": "Cache-Control", "value": "public, max-age=86400" }
-      ]
+      "src": "/js/(.*)",
+      "dest": "/src/js/$1"
     },
     {
-      "source": "/(.*)",
-      "headers": [
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "X-Frame-Options", "value": "DENY" },
-        { "key": "X-XSS-Protection", "value": "1; mode=block" }
-      ]
+      "src": "/services/(.*)",
+      "dest": "/src/services/$1"
+    },
+    {
+      "src": "/utils/(.*)",
+      "dest": "/src/utils/$1"
+    },
+    {
+      "src": "/assets/(.*)",
+      "dest": "/src/assets/$1"
+    },
+    {
+      "src": "/manifest.json",
+      "dest": "/src/manifest.json"
+    },
+    {
+      "src": "/sw.js",
+      "dest": "/src/sw.js"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "src/server.js"
     }
   ]
 }
