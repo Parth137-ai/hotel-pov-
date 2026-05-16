@@ -8,32 +8,8 @@
   ],
   "routes": [
     {
-      "src": "/styles/(.*)",
-      "dest": "/src/styles/$1"
-    },
-    {
-      "src": "/js/(.*)",
-      "dest": "/src/js/$1"
-    },
-    {
-      "src": "/services/(.*)",
-      "dest": "/src/services/$1"
-    },
-    {
-      "src": "/utils/(.*)",
-      "dest": "/src/utils/$1"
-    },
-    {
-      "src": "/assets/(.*)",
-      "dest": "/src/assets/$1"
-    },
-    {
-      "src": "/manifest.json",
-      "dest": "/src/manifest.json"
-    },
-    {
-      "src": "/sw.js",
-      "dest": "/src/sw.js"
+      "src": "/socket.io/(.*)",
+      "dest": "src/server.js"
     },
     {
       "src": "/(.*)",

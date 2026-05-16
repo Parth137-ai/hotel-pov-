@@ -13,23 +13,23 @@ app.use(cors());
 
 // Serve static files from the src directory
 app.use(express.static(path.join(__dirname)));
-// Serve assets from src/assets
 app.use('/assets', express.static(path.join(__dirname, 'assets')));
-// Serve styles from src/styles
 app.use('/styles', express.static(path.join(__dirname, 'styles')));
-// Serve scripts from src/services, src/utils, etc.
 app.use('/services', express.static(path.join(__dirname, 'services')));
 app.use('/utils', express.static(path.join(__dirname, 'utils')));
 app.use('/js', express.static(path.join(__dirname, 'js')));
 
-// Serve index.html from src/pages
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'pages', 'index.html'));
 });
 
-const DATA_FILE = path.join(__dirname, 'data', 'pos_data.json');
+const DATA_DIR = process.env.VERCEL ? '/tmp' : path.join(__dirname, 'data');
+const DATA_FILE = path.join(DATA_DIR, 'pos_data.json');
 
-// Default state logic remains the same
+if (!process.env.VERCEL && !fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
 let POS_STATE = {
   STAFF: [
     {id:'admin',name:'Raj Admin',role:'Manager',pin:'1234',color:'#E94560',emoji:'👨‍💼',access:'all'},
@@ -96,7 +96,6 @@ let POS_STATE = {
   deductionLog: []
 };
 
-// Initialize tableStatus if empty
 POS_STATE.TABLES.forEach(t=>{POS_STATE.tableStatus[t.id]={status:'free',amount:0,items:0,since:null,order:{}};});
 
 function loadData() {
@@ -104,7 +103,6 @@ function loadData() {
     try {
       const data = fs.readFileSync(DATA_FILE, 'utf8');
       POS_STATE = JSON.parse(data);
-      console.log('Loaded state from data/pos_data.json');
     } catch (e) {
       console.error('Error parsing pos_data.json', e);
     }
@@ -114,33 +112,37 @@ function loadData() {
 }
 
 function saveData() {
-  fs.writeFileSync(DATA_FILE, JSON.stringify(POS_STATE, null, 2));
+  try {
+    fs.writeFileSync(DATA_FILE, JSON.stringify(POS_STATE, null, 2));
+  } catch (e) {
+    console.error('Save failed:', e.message);
+  }
 }
 
 loadData();
 
 io.on('connection', (socket) => {
-  console.log('Client connected:', socket.id);
   socket.emit('initialState', POS_STATE);
-
   socket.on('syncState', (key, data) => {
     POS_STATE[key] = data;
     saveData();
     socket.broadcast.emit('stateUpdated', key, data);
   });
-
   socket.on('syncTableStatus', (tid, data) => {
     POS_STATE.tableStatus[tid] = data;
     saveData();
     socket.broadcast.emit('tableStatusUpdated', tid, data);
   });
-
   socket.on('orderReadyNotify', (msg) => {
     io.emit('orderReady', msg);
   });
 });
 
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`POS Server running at http://localhost:${PORT}`);
-});
+module.exports = server;
+
+if (require.main === module) {
+  const PORT = process.env.PORT || 3000;
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log(`POS Server running at http://localhost:${PORT}`);
+  });
+}
