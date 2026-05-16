@@ -154,8 +154,8 @@ self.addEventListener('push', event => {
   const data = event.data.json();
   self.registration.showNotification(data.title || 'GP Hotel POS', {
     body: data.body || 'New notification',
-    icon: '/icon-192.png',
-    badge: '/icon-192.png',
+    icon: '/assets/icons/icon-192.png',
+    badge: '/assets/icons/icon-192.png',
     tag: data.tag || 'gp-pos',
     data: data,
   });
