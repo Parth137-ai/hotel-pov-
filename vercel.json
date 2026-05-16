@@ -1,13 +1,6 @@
 {
   "version": 2,
-  "rewrites": [
-    {
-      "source": "/socket.io/(.*)",
-      "destination": "/api/index.js"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/api/index.js"
-    }
-  ]
+  "buildCommand": "echo 'No build needed'",
+  "outputDirectory": ".",
+  "framework": null
 }
