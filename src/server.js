@@ -10,12 +10,26 @@ const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
 app.use(cors());
-// Serve static files from current directory
-app.use(express.static(__dirname));
 
-const DATA_FILE = path.join(__dirname, 'pos_data.json');
+// Serve static files from the src directory
+app.use(express.static(path.join(__dirname)));
+// Serve assets from src/assets
+app.use('/assets', express.static(path.join(__dirname, 'assets')));
+// Serve styles from src/styles
+app.use('/styles', express.static(path.join(__dirname, 'styles')));
+// Serve scripts from src/services, src/utils, etc.
+app.use('/services', express.static(path.join(__dirname, 'services')));
+app.use('/utils', express.static(path.join(__dirname, 'utils')));
+app.use('/js', express.static(path.join(__dirname, 'js')));
 
-// Default initial state
+// Serve index.html from src/pages
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'pages', 'index.html'));
+});
+
+const DATA_FILE = path.join(__dirname, 'data', 'pos_data.json');
+
+// Default state logic remains the same
 let POS_STATE = {
   STAFF: [
     {id:'admin',name:'Raj Admin',role:'Manager',pin:'1234',color:'#E94560',emoji:'👨‍💼',access:'all'},
@@ -85,28 +99,16 @@ let POS_STATE = {
 // Initialize tableStatus if empty
 POS_STATE.TABLES.forEach(t=>{POS_STATE.tableStatus[t.id]={status:'free',amount:0,items:0,since:null,order:{}};});
 
-// Load from file if exists
 function loadData() {
   if (fs.existsSync(DATA_FILE)) {
     try {
       const data = fs.readFileSync(DATA_FILE, 'utf8');
       POS_STATE = JSON.parse(data);
-      console.log('Loaded state from pos_data.json');
+      console.log('Loaded state from data/pos_data.json');
     } catch (e) {
       console.error('Error parsing pos_data.json', e);
     }
   } else {
-    // Generate initial sample data for demonstration
-    POS_STATE.tableStatus['T2']={status:'occupied',amount:420,items:3,since:'10:15 AM',order:{7:{id:7,name:'Chicken Biryani',price:240,cat:'Main Course',veg:false,code:'CB',active:true,gst:5,qty:1},19:{id:19,name:'Mango Lassi',price:80,cat:'Beverages',veg:true,code:'ML',active:true,gst:5,qty:2}}};
-    POS_STATE.tableStatus['T4']={status:'occupied',amount:280,items:2,since:'11:00 AM',order:{10:{id:10,name:'Butter Chicken',price:280,cat:'Main Course',veg:false,code:'BC',active:true,gst:5,qty:1},24:{id:24,name:'Ice Cream (2 scoops)',price:110,cat:'Desserts',veg:true,code:'IC',active:true,gst:5,qty:1}}};
-    POS_STATE.bills = [
-      {id:'B-0001',table:'Table 1',time:'08:45 AM',items:3,amount:390,status:'paid',staff:'Priya Sharma'},
-      {id:'B-0002',table:'Room 102',time:'09:20 AM',items:2,amount:250,status:'paid',staff:'Amit Singh'},
-      {id:'B-0003',table:'Table 2',time:'10:15 AM',items:3,amount:420,status:'pending',staff:'Priya Sharma'}
-    ];
-    POS_STATE.kots = [
-      {id:'K-001',table:'Table 2',time:'10:16 AM',items:[{n:'Chicken Biryani',q:1},{n:'Mango Lassi',q:2}],urgent:false}
-    ];
     saveData();
   }
 }
@@ -119,16 +121,11 @@ loadData();
 
 io.on('connection', (socket) => {
   console.log('Client connected:', socket.id);
-  
-  // Send full state on connect
   socket.emit('initialState', POS_STATE);
 
-  // Listen for sync events
   socket.on('syncState', (key, data) => {
-    // Update server state
     POS_STATE[key] = data;
     saveData();
-    // Broadcast to ALL OTHER clients
     socket.broadcast.emit('stateUpdated', key, data);
   });
 
@@ -139,17 +136,11 @@ io.on('connection', (socket) => {
   });
 
   socket.on('orderReadyNotify', (msg) => {
-    console.log('Broadcasting notification:', msg);
-    io.emit('orderReady', msg); // Send to EVERYONE including sender
-  });
-
-  socket.on('disconnect', () => {
-    console.log('Client disconnected:', socket.id);
+    io.emit('orderReady', msg);
   });
 });
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`POS Server running at http://localhost:${PORT}`);
-  console.log(`Access on other devices using your local IP address.`);
 });
