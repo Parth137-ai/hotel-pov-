@@ -1,0 +1,16 @@
+node_modules
+.git
+src
+server.js
+*.log
+.env
+.env.local
+.editorconfig
+.prettierrc
+jsconfig.json
+package-lock.json
+DEPLOY.md
+README.md
+icon-192[2].png
+sw.js
+manifest.json
